@@ -52,6 +52,7 @@ jobs:
 
       - name: Configure kernel
         run: |
+          mkdir -p out
           scripts/kconfig/merge_config.sh -m -O out \
             arch/arm64/configs/gki_defconfig \
             arch/arm64/configs/vendor/pineapple_perf.config
