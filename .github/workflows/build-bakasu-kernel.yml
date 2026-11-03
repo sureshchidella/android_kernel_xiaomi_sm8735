@@ -22,6 +22,9 @@ jobs:
     env:
       BAKASU_COMMIT: 516d3e87fbc986ccefdde2c2765f1700612441a9
       ANYKERNEL3_COMMIT: 41f04bdb4ee30a44e429c2c1131d5e8bb32b15f1
+      AK3_ARM64_TOOLS_COMMIT: cc7d2cee9b1b4298f6ab8666eb4486dea342748c
+      AK3_ARM64_BUSYBOX_SHA256: c629fce4b0dd3ba9775f851d0941e74582115f423258d3a79800f2bd11d30f5c
+      AK3_ARM64_MAGISKBOOT_SHA256: 97e9ec75731103d31c9e1effca7a50c6444309ce8f78c2ec27e9fe721da4bb54
       SUSFS_VERSION: v2.3.0
       SUSFS_COMMIT: c7f670f57b7d43d75066b6657f8aee9cdf580d96
 
@@ -97,6 +100,9 @@ jobs:
           git -C "$RUNNER_TEMP/ak3-src" fetch --depth=1 origin "$ANYKERNEL3_COMMIT"
           git -C "$RUNNER_TEMP/ak3-src" checkout --detach "$ANYKERNEL3_COMMIT"
           test "$(git -C "$RUNNER_TEMP/ak3-src" rev-parse HEAD)" = "$ANYKERNEL3_COMMIT"
+          git -C "$RUNNER_TEMP/ak3-src" fetch --depth=1 origin \
+            refs/heads/arm64-tools:refs/remotes/origin/arm64-tools
+          test "$(git -C "$RUNNER_TEMP/ak3-src" rev-parse refs/remotes/origin/arm64-tools)" = "$AK3_ARM64_TOOLS_COMMIT"
 
           for variant in smooth performance; do
             stage="$RUNNER_TEMP/ZoroKernel-$variant"
@@ -106,6 +112,16 @@ jobs:
             rm -rf "$stage/.git" "$stage/.github" "$stage/README.md"
             cp out/arch/arm64/boot/Image "$stage/Image"
             cp anykernel/anykernel.sh "$stage/anykernel.sh"
+            for tool in busybox magiskboot; do
+              git -C "$RUNNER_TEMP/ak3-src" show "$AK3_ARM64_TOOLS_COMMIT:$tool" > "$stage/tools/$tool"
+              chmod 0755 "$stage/tools/$tool"
+              readelf -h "$stage/tools/$tool" | grep -q 'Machine:.*AArch64'
+            done
+            printf '%s  %s\\n' "$AK3_ARM64_BUSYBOX_SHA256" "$stage/tools/busybox" | sha256sum --check --status
+            printf '%s  %s\\n' "$AK3_ARM64_MAGISKBOOT_SHA256" "$stage/tools/magiskboot" | sha256sum --check --status
+            rm -rf "$stage/tools/arm" "$stage/tools/x86"
+            test -x "$stage/tools/busybox"
+            test -x "$stage/tools/magiskboot"
             if [ "$variant" = smooth ]; then
               mkdir -p "$stage/onyx_cpu_limits"
               cp -a tools/onyx_cpu_limits/. "$stage/onyx_cpu_limits/"
@@ -123,6 +139,14 @@ jobs:
             echo 'Performance package must not contain CPU caps' >&2
             exit 1
           fi
+          for package in artifacts/ZoroKernel-1.0_smooth_bakasu.zip artifacts/ZoroKernel_1.0_performance_bakasu.zip; do
+            test "$(unzip -p "$package" tools/busybox | sha256sum | cut -d' ' -f1)" = "$AK3_ARM64_BUSYBOX_SHA256"
+            test "$(unzip -p "$package" tools/magiskboot | sha256sum | cut -d' ' -f1)" = "$AK3_ARM64_MAGISKBOOT_SHA256"
+            if unzip -Z1 "$package" | grep -Eq '^tools/(arm|x86)/'; then
+              echo "Package contains an architecture-specific BusyBox override: $package" >&2
+              exit 1
+            fi
+          done
 
       - name: Collect build metadata
         if: always()
