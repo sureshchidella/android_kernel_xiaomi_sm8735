@@ -72,30 +72,16 @@ jobs:
           make -j"$(nproc)" O=out ARCH=arm64 LLVM=1 Image
           test -s out/arch/arm64/boot/Image
 
-      - name: Set up Node.js for the module WebUI
-        uses: actions/setup-node@v7
-        with:
-          node-version: 24
-          package-manager-cache: false
-
-      - name: Package Onyx CPU Profiles module
+      - name: Package Onyx CPU Limits module
         run: |
-          cd onyx_cpu_profiles/webui
-          npm install --no-audit --no-fund --no-package-lock
-          npm run build
-          cd ../../..
-          module_dir="$RUNNER_TEMP/onyx_cpu_profiles"
+          module_dir="$RUNNER_TEMP/onyx_cpu_limits"
           rm -rf "$module_dir"
           mkdir -p "$module_dir"
-          cp -a onyx_cpu_profiles/. "$module_dir/"
-          rm -rf "$module_dir/webroot"
-          cp -a onyx_cpu_profiles/webui/webroot-built "$module_dir/webroot"
-          rm -rf "$module_dir/webroot-built" "$module_dir/webui"
-          chmod 0755 "$module_dir/service.sh" "$module_dir/action.sh" \
-            "$module_dir/uninstall.sh" "$module_dir/bin/profile.sh"
+          cp -a tools/onyx_cpu_limits/. "$module_dir/"
+          chmod 0755 "$module_dir/service.sh" "$module_dir/uninstall.sh"
           mkdir -p artifacts
           cd "$module_dir"
-          zip -r "$GITHUB_WORKSPACE/artifacts/Onyx-CPU-Profiles-BakaSU.zip" .
+          zip -r "$GITHUB_WORKSPACE/artifacts/Onyx-CPU-Limits-BakaSU.zip" .
 
       - name: Collect build outputs
         if: always()
@@ -134,11 +120,11 @@ jobs:
           if-no-files-found: error
           retention-days: 14
 
-      - name: Upload BakaSU CPU profiles module
+      - name: Upload BakaSU CPU limits module
         if: success()
         uses: actions/upload-artifact@v7
         with:
-          name: Onyx-CPU-Profiles-BakaSU
-          path: artifacts/Onyx-CPU-Profiles-BakaSU.zip
+          name: Onyx-CPU-Limits-BakaSU
+          path: artifacts/Onyx-CPU-Limits-BakaSU.zip
           if-no-files-found: error
           retention-days: 14

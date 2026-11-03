@@ -1,0 +1,6 @@
+id=onyx_cpu_limits
+name=Onyx CPU Limits
+version=1.0.0
+versionCode=1
+author=Onyx Kernel Project
+description=Fixed CPU maximum frequency limits for POCO F7 (onyx).
