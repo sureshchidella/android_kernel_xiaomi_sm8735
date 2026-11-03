@@ -117,8 +117,8 @@ jobs:
               chmod 0755 "$stage/tools/$tool"
               readelf -h "$stage/tools/$tool" | grep -q 'Machine:.*AArch64'
             done
-            printf '%s  %s\\n' "$AK3_ARM64_BUSYBOX_SHA256" "$stage/tools/busybox" | sha256sum --check --status
-            printf '%s  %s\\n' "$AK3_ARM64_MAGISKBOOT_SHA256" "$stage/tools/magiskboot" | sha256sum --check --status
+            printf '%s  %s\n' "$AK3_ARM64_BUSYBOX_SHA256" "$stage/tools/busybox" | sha256sum --check --status
+            printf '%s  %s\n' "$AK3_ARM64_MAGISKBOOT_SHA256" "$stage/tools/magiskboot" | sha256sum --check --status
             rm -rf "$stage/tools/arm" "$stage/tools/x86"
             test -x "$stage/tools/busybox"
             test -x "$stage/tools/magiskboot"
