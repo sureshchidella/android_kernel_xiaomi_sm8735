@@ -54,36 +54,23 @@ jobs:
 
       - name: Configure kernel
         run: |
-          make O=out ARCH=arm64 LLVM=1 gki_defconfig
+          scripts/kconfig/merge_config.sh -m -O out \
+            arch/arm64/configs/gki_defconfig \
+            arch/arm64/configs/vendor/pineapple_perf.config
+          make O=out ARCH=arm64 LLVM=1 olddefconfig
           scripts/config --file out/.config --enable KSU
           make O=out ARCH=arm64 LLVM=1 olddefconfig
           grep -q '^CONFIG_KSU=y$' out/.config
+          grep -q '^CONFIG_ARCH_PINEAPPLE=y$' out/.config
+          grep -q '^CONFIG_DEVFREQ_GOV_QCOM_ADRENO_TZ=m$' out/.config
+          grep -q '^CONFIG_DEVFREQ_GOV_QCOM_GPUBW_MON=m$' out/.config
+          grep -q '^CONFIG_SCHED_WALT=m$' out/.config
           grep -E '^(CONFIG_KSU|CONFIG_KSU_)' out/.config
 
       - name: Build kernel
         run: |
           make -j"$(nproc)" O=out ARCH=arm64 LLVM=1 Image
           test -s out/arch/arm64/boot/Image
-
-      - name: Download SweetClocker module
-        env:
-          SWEETCLOCKER_VERSION: v1.4.0
-        run: |
-          mkdir -p artifacts
-          release_json=$(curl --fail --silent --show-error \
-            "https://api.github.com/repos/Lavax88/SweetClocker/releases/tags/${SWEETCLOCKER_VERSION}")
-          asset_url=$(printf '%s' "$release_json" | python3 -c '
-          import json, sys
-          release = json.load(sys.stdin)
-          assets = release.get("assets", [])
-          matches = [a for a in assets if a.get("name", "").lower().endswith(".zip")]
-          if len(matches) != 1:
-              raise SystemExit(f"Expected exactly one ZIP release asset, found {len(matches)}")
-          print(matches[0]["browser_download_url"])
-          ')
-          curl --fail --location --silent --show-error "$asset_url" \
-            --output artifacts/SweetClocker-${SWEETCLOCKER_VERSION}.zip
-          unzip -t artifacts/SweetClocker-${SWEETCLOCKER_VERSION}.zip
 
       - name: Collect build outputs
         if: always()
@@ -101,17 +88,16 @@ jobs:
           printf '%s\n' "$kernel_commit" > artifacts/kernel-commit.txt
           printf '%s\n' "$bakasu_commit" > artifacts/bakasu-commit.txt
           cat > artifacts/README.txt <<EOF
-          Onyx LineageOS 24.0 BakaSU CI build
+          Onyx LineageOS 24.0 / Android 17 BakaSU CI build
 
           Kernel release: $kernel_release
           Kernel source commit: $kernel_commit
           BakaSU source commit: $bakasu_commit
+          Config: gki_defconfig + vendor/pineapple_perf.config + BakaSU
 
           Image is a raw kernel build output for CI inspection. It is not a flashable
           boot image or recovery ZIP. Device-matched boot image metadata, ramdisk,
           DTBO, vendor modules, and a reviewed installer are required for flashing.
-
-          The SweetClocker ZIP is a separate CPU tuning module and is not part of Image.
           EOF
 
       - name: Upload kernel artifacts
