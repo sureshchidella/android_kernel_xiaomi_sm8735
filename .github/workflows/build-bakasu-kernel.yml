@@ -27,7 +27,7 @@ jobs:
 
     steps:
       - name: Check out kernel source
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Install build dependencies
         run: |
@@ -95,14 +95,30 @@ jobs:
           if [ -f out/.config ]; then
             cp out/.config artifacts/kernel.config
           fi
-          git rev-parse HEAD > artifacts/kernel-commit.txt
-          git -C KernelSU rev-parse HEAD > artifacts/bakasu-commit.txt 2>/dev/null || true
+          kernel_commit=$(git rev-parse HEAD)
+          bakasu_commit=$(git -C KernelSU rev-parse HEAD 2>/dev/null || echo unavailable)
+          kernel_release=$(make -s O=out ARCH=arm64 LLVM=1 kernelrelease 2>/dev/null || echo unavailable)
+          printf '%s\n' "$kernel_commit" > artifacts/kernel-commit.txt
+          printf '%s\n' "$bakasu_commit" > artifacts/bakasu-commit.txt
+          cat > artifacts/README.txt <<EOF
+          Onyx LineageOS 24.0 BakaSU CI build
+
+          Kernel release: $kernel_release
+          Kernel source commit: $kernel_commit
+          BakaSU source commit: $bakasu_commit
+
+          Image is a raw kernel build output for CI inspection. It is not a flashable
+          boot image or recovery ZIP. Device-matched boot image metadata, ramdisk,
+          DTBO, vendor modules, and a reviewed installer are required for flashing.
+
+          The SweetClocker ZIP is a separate CPU tuning module and is not part of Image.
+          EOF
 
       - name: Upload kernel artifacts
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
-          name: lineage-24.0-bakasu-${{ github.sha }}
+          name: Onyx-Lineage-24.0-BakaSU-CI
           path: artifacts/
           if-no-files-found: error
           retention-days: 14
