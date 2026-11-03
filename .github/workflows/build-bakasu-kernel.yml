@@ -1,0 +1,108 @@
+name: Build BakaSU kernel
+
+on:
+  push:
+    branches:
+      - lineage-24.0_underclock_bakasu
+  workflow_dispatch:
+    inputs:
+      bakasu_ref:
+        description: BakaSU branch, tag, or commit to integrate
+        required: true
+        default: main
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: bakasu-kernel-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Build arm64 kernel with BakaSU
+    runs-on: ubuntu-24.04
+    timeout-minutes: 360
+
+    steps:
+      - name: Check out kernel source
+        uses: actions/checkout@v4
+
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            bc bison build-essential ccache flex git libelf-dev \
+            libssl-dev make pahole python3 python3-pip rsync
+
+      - name: Install LLVM toolchain
+        run: |
+          sudo apt-get install -y clang lld llvm
+          clang --version
+
+      - name: Fetch and integrate BakaSU
+        env:
+          BAKASU_REF: ${{ inputs.bakasu_ref || 'main' }}
+        run: |
+          rm -rf KernelSU
+          git clone https://github.com/Baka-SU/BakaSU.git KernelSU
+          sh KernelSU/kernel/setup.sh
+          git -C KernelSU fetch --depth=1 origin "$BAKASU_REF"
+          git -C KernelSU checkout --detach FETCH_HEAD
+          test -L drivers/kernelsu
+
+      - name: Configure kernel
+        run: |
+          make O=out ARCH=arm64 LLVM=1 gki_defconfig
+          scripts/config --file out/.config --enable KSU
+          make O=out ARCH=arm64 LLVM=1 olddefconfig
+          grep -q '^CONFIG_KSU=y$' out/.config
+          grep -E '^(CONFIG_KSU|CONFIG_KSU_)' out/.config
+
+      - name: Build kernel
+        run: |
+          make -j"$(nproc)" O=out ARCH=arm64 LLVM=1 Image
+          test -s out/arch/arm64/boot/Image
+
+      - name: Download SweetClocker module
+        env:
+          SWEETCLOCKER_VERSION: v1.4.0
+        run: |
+          mkdir -p artifacts
+          release_json=$(curl --fail --silent --show-error \
+            "https://api.github.com/repos/Lavax88/SweetClocker/releases/tags/${SWEETCLOCKER_VERSION}")
+          asset_url=$(printf '%s' "$release_json" | python3 -c '
+          import json, sys
+          release = json.load(sys.stdin)
+          assets = release.get("assets", [])
+          matches = [a for a in assets if a.get("name", "").lower().endswith(".zip")]
+          if len(matches) != 1:
+              raise SystemExit(f"Expected exactly one ZIP release asset, found {len(matches)}")
+          print(matches[0]["browser_download_url"])
+          ')
+          curl --fail --location --silent --show-error "$asset_url" \
+            --output artifacts/SweetClocker-${SWEETCLOCKER_VERSION}.zip
+          unzip -t artifacts/SweetClocker-${SWEETCLOCKER_VERSION}.zip
+
+      - name: Collect build outputs
+        if: always()
+        run: |
+          mkdir -p artifacts
+          if [ -f out/arch/arm64/boot/Image ]; then
+            cp out/arch/arm64/boot/Image artifacts/Image
+          fi
+          if [ -f out/.config ]; then
+            cp out/.config artifacts/kernel.config
+          fi
+          git rev-parse HEAD > artifacts/kernel-commit.txt
+          git -C KernelSU rev-parse HEAD > artifacts/bakasu-commit.txt 2>/dev/null || true
+
+      - name: Upload kernel artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: lineage-24.0-bakasu-${{ github.sha }}
+          path: artifacts/
+          if-no-files-found: error
+          retention-days: 14
